@@ -73,11 +73,11 @@ def compare_models(subject):
         data_files = {}
         
         data_files[dwi_file] = \
-            'HCP/%s/T1w/Diffusion/data.nii.gz' % subject
+            'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
         data_files[bvec_file] = \
-            'HCP/%s/T1w/Diffusion/bvecs' % subject
+            'HCP_900/%s/T1w/Diffusion/bvecs' % subject
         data_files[bval_file] = \
-            'HCP/%s/T1w/Diffusion/bvals' % subject
+            'HCP_900/%s/T1w/Diffusion/bvals' % subject
         for k in data_files.keys():
             if not op.exists(k):
                 bucket.download_file(data_files[k], k)
