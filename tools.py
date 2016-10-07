@@ -31,9 +31,9 @@ def save_wm_mask(subject):
         seg_file = op.join(temp_dir, 'aparc+aseg.nii.gz')
         data_files = {}
         data_files[dwi_file] = \
-            'HCP/%s/T1w/Diffusion/data.nii.gz' % subject
+            'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
         data_files[seg_file] = \
-            'HCP/%s/T1w/aparc+aseg.nii.gz' % subject
+            'HCP_900/%s/T1w/aparc+aseg.nii.gz' % subject
         for k in data_files.keys():
             if not op.exists(k):
                 bucket.download_file(data_files[k], k)
