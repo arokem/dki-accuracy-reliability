@@ -1,47 +1,63 @@
-import nibabel as nib
+import AFQ.tractography as aft
+import AFQ.registration as reg
+import AFQ.data as afd
+
+import tempfile
 import numpy as np
-from dipy.align.imaffine import AffineMap
-import ipywidgets as wdg
-import IPython.display as display
-import matplotlib.pyplot as plt
+import nibabel as nib
+import boto3
+import os
+import os.path as op
+import AFQ.registration as reg
 
-def resample_volume(moving, static):
-    """ 
-    Resample a nifti image into the space of another nifti image
-    
-    Parameters
-    ----------
-    moving : Nifti1Image
-        The 'source' image.
-    static : Nifti1Image
-        The 'target' image.
-        
-    Returns
-    -------
-    resampled_img : Nifti1Image
-       The source data in the target space, with the target affine
-    """
-    affine_map = AffineMap(np.eye(4),
-                           static.shape[:3], static.affine, 
-                           moving.shape, moving.affine)
-    
-    resampled = affine_map.transform(moving.get_data())
-    return nib.Nifti1Image(resampled, static.get_affine())
+import numpy as np
+
+import dipy.reconst.dti as dti
+import dipy.reconst.dki as dki
+import dipy.core.gradients as dpg
+import dipy.reconst.cross_validation as xval
+
+def setup_boto():
+    boto3.setup_default_session(profile_name='hcp')
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket('hcp-openaccess')
+    return bucket
 
 
-def make_widget(data, cmap='bone', dims=4, contours=False):
-    """Create an ipython widget for displaying 3D/4D data."""
-    def plot_rgb_image(z=data.shape[-2]//2):
-        fig, ax = plt.subplots(1)
-        im = ax.imshow(data[:, :, z])
-        fig.set_size_inches([10, 10])
-        plt.show()
+def save_wm_mask(subject):
+    bucket = setup_boto()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dwi_file = op.join(temp_dir, 'data.nii.gz')
+        seg_file = op.join(temp_dir, 'aparc+aseg.nii.gz')
+        data_files = {}
+        data_files[dwi_file] = \
+            'HCP/%s/T1w/Diffusion/data.nii.gz' % subject
+        data_files[seg_file] = \
+            'HCP/%s/T1w/aparc+aseg.nii.gz' % subject
+        for k in data_files.keys():
+            if not op.exists(k):
+                bucket.download_file(data_files[k], k)
 
-    pb_widget = wdg.interactive(plot_rgb_image,
-                                    z=wdg.IntSlider(min=0,
-                                                    max=data.shape[-2]-1,
-                                                    value=data.shape[-2]//2),
-                                    b=wdg.IntSlider(min=0,
-                                                    max=data.shape[-1]-1,
-                                                    value=0))
-    display.display(pb_widget)
+        seg_img = nib.load(seg_file)
+        dwi_img = nib.load(dwi_file)
+        seg_data_orig = seg_img.get_data()
+        # Corpus callosum labels:
+        cc_mask = ((seg_data_orig==251) | 
+                   (seg_data_orig==252) |
+                   (seg_data_orig==253) |
+                   (seg_data_orig==254) |
+                   (seg_data_orig==255))
+
+        # Cerebral white matter in both hemispheres + corpus callosum
+        wm_mask = (seg_data_orig==41) | (seg_data_orig==2) | (cc_mask)
+        dwi_data = dwi_img.get_data()
+        resamp_wm = np.round(reg.resample(wm_mask, dwi_data[..., 0], seg_img.affine, dwi_img.affine)).astype(int)
+        wm_file = op.join(temp_dir, 'wm.nii.gz')
+        nib.save(nib.Nifti1Image(resamp_wm.astype(int), dwi_img.affine), wm_file) 
+        boto3.setup_default_session(profile_name='cirrus')
+        s3 = boto3.resource('s3')
+        s3.meta.client.upload_file(wm_file, 
+                                   'hcp-dki', 
+                                   '%s/%s_white_matter_mask.nii.gz'%(subject, subject))
+
+    return (subject, data_files)
