@@ -61,3 +61,55 @@ def save_wm_mask(subject):
                                    '%s/%s_white_matter_mask.nii.gz'%(subject, subject))
 
     return (subject, data_files)
+
+
+def compare_models(subject):
+    bucket = setup_boto()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dwi_file = op.join(temp_dir, 'data.nii.gz')
+        bvec_file = op.join(temp_dir, 'data.bvec')
+        bval_file = op.join(temp_dir, 'data.bval')
+
+        data_files = {}
+        
+        data_files[dwi_file] = \
+            'HCP/%s/T1w/Diffusion/data.nii.gz' % subject
+        data_files[bvec_file] = \
+            'HCP/%s/T1w/Diffusion/bvecs' % subject
+        data_files[bval_file] = \
+            'HCP/%s/T1w/Diffusion/bvals' % subject
+        for k in data_files.keys():
+            if not op.exists(k):
+                bucket.download_file(data_files[k], k)
+
+        wm_file = op.join(temp_dir, 'wm.nii.gz')
+        boto3.setup_default_session(profile_name='cirrus')
+        s3 = boto3.resource('s3')
+        s3.meta.client.download_file('hcp-dki', '%s/%s_white_matter_mask.nii.gz'%(subject, subject), wm_file)
+        wm_mask = nib.load(wm_file).get_data().astype(bool)
+        dwi_img = nib.load(dwi_file)
+        data = dwi_img.get_data()
+        gtab = dpg.gradient_table(bval_file, bvec_file, b0_threshold=10)
+        for model_object, method in zip([dti.TensorModel, dki.DiffusionKurtosisModel],
+                                        ['dti', 'dki']):
+            
+            print("1")
+            model = model_object(gtab)
+            print("2")
+            if method == 'dti':
+                pred = xval.kfold_xval(model, data, 5, mask=wm_mask, step=1000000)
+            else: 
+                pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
+
+            print("3")
+            cod = xval.coeff_of_determination(pred, data)
+            cod_file = op.join(temp_dir, 'cod_%s.nii.gz'%method)
+            print("4")
+            nib.save(nib.Nifti1Image(cod, dwi_img.affine), cod_file)
+            print("5")
+            s3.meta.client.upload_file(cod_file, 
+                                       'hcp-dki', 
+                                       '%s/%s_cod_%s.nii.gz'%(subject, subject, method))
+
+        
+        
