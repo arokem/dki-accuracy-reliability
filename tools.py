@@ -121,5 +121,5 @@ def compare_models(subject, tempdir):
                     cod_file,
                     'hcp-dki',
                     '%s/%s_cod_%s.nii.gz' % (subject, subject, method))
-            except Exception as err:
-                return subject, err
+        except Exception as err:
+            return subject, err
