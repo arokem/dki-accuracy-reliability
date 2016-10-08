@@ -24,7 +24,7 @@ def setup_boto():
     return bucket
 
 
-def save_wm_mask(subject, tempdir):
+def save_wm_mask(subject):
     bucket = setup_boto()
     with tempfile.TemporaryDirectory() as tempdir:
         try:
@@ -68,7 +68,7 @@ def save_wm_mask(subject, tempdir):
             return subject, err
 
 
-def compare_models(subject, tempdir):
+def compare_models(subject):
     with tempfile.TemporaryDirectory() as tempdir:
         try:
             bucket = setup_boto()
