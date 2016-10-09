@@ -17,6 +17,16 @@ import dipy.reconst.dki as dki
 import dipy.core.gradients as dpg
 import dipy.reconst.cross_validation as xval
 
+def exists(bucket, path):
+    all_obj = bucket.objects.all()
+    pages = all_obj.pages()
+    paths = [kk.key for kk in [p for p in pages][0]]
+    if path in paths:
+        return True
+    else:
+        return False
+
+
 def setup_boto():
     boto3.setup_default_session(profile_name='hcp')
     s3 = boto3.resource('s3')
@@ -25,96 +35,118 @@ def setup_boto():
 
 
 def save_wm_mask(subject):
-    bucket = setup_boto()
-    with tempfile.TemporaryDirectory() as tempdir:
-        try:
-            dwi_file = op.join(tempdir, 'data.nii.gz')
-            seg_file = op.join(tempdir, 'aparc+aseg.nii.gz')
-            data_files = {}
-            data_files[dwi_file] = \
-                'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
-            data_files[seg_file] = \
-                'HCP_900/%s/T1w/aparc+aseg.nii.gz' % subject
-            for k in data_files.keys():
-                if not op.exists(k):
-                    bucket.download_file(data_files[k], k)
+    s3 = boto3.resource('s3')
+    boto3.setup_default_session(profile_name='hcp')
+    bucket = s3.Bucket('hcp-dki')
+    path = '%s/%s_white_matter_mask.nii.gz' % (subject, subject)
+    if not exists(bucket, path):
+        bucket = setup_boto()
+        with tempfile.TemporaryDirectory() as tempdir:
+            try:
+                dwi_file = op.join(tempdir, 'data.nii.gz')
+                seg_file = op.join(tempdir, 'aparc+aseg.nii.gz')
+                data_files = {}
+                data_files[dwi_file] = \
+                    'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
+                data_files[seg_file] = \
+                    'HCP_900/%s/T1w/aparc+aseg.nii.gz' % subject
+                for k in data_files.keys():
+                    if not op.exists(k):
+                        bucket.download_file(data_files[k], k)
 
-            seg_img = nib.load(seg_file)
-            dwi_img = nib.load(dwi_file)
-            seg_data_orig = seg_img.get_data()
-            # Corpus callosum labels:
-            cc_mask = ((seg_data_orig == 251) |
-                       (seg_data_orig == 252) |
-                       (seg_data_orig == 253) |
-                       (seg_data_orig == 254) |
-                       (seg_data_orig == 255))
+                seg_img = nib.load(seg_file)
+                dwi_img = nib.load(dwi_file)
+                seg_data_orig = seg_img.get_data()
+                # Corpus callosum labels:
+                cc_mask = ((seg_data_orig == 251) |
+                           (seg_data_orig == 252) |
+                           (seg_data_orig == 253) |
+                           (seg_data_orig == 254) |
+                           (seg_data_orig == 255))
 
-            # Cerebral white matter in both hemispheres + corpus callosum
-            wm_mask = (seg_data_orig == 41) | (seg_data_orig == 2) | (cc_mask)
-            dwi_data = dwi_img.get_data()
-            resamp_wm = np.round(reg.resample(wm_mask, dwi_data[..., 0],
-                                 seg_img.affine, dwi_img.affine)).astype(int)
-            wm_file = op.join(tempdir, 'wm.nii.gz')
-            nib.save(nib.Nifti1Image(resamp_wm.astype(int), dwi_img.affine),
-                     wm_file)
-            boto3.setup_default_session(profile_name='cirrus')
-            s3 = boto3.resource('s3')
-            s3.meta.client.upload_file(
-                    wm_file,
-                    'hcp-dki',
-                    '%s/%s_white_matter_mask.nii.gz' % (subject, subject))
-            return subject, True
-        except Exception as err:
-            return subject, err.args
+                # Cerebral white matter in both hemispheres + corpus callosum
+                wm_mask = ((seg_data_orig == 41) | (seg_data_orig == 2) |
+                           (cc_mask))
+                dwi_data = dwi_img.get_data()
+                resamp_wm = np.round(reg.resample(wm_mask, dwi_data[..., 0],
+                                     seg_img.affine,
+                                     dwi_img.affine)).astype(int)
+                wm_file = op.join(tempdir, 'wm.nii.gz')
+                nib.save(nib.Nifti1Image(resamp_wm.astype(int),
+                                         dwi_img.affine),
+                         wm_file)
+                boto3.setup_default_session(profile_name='cirrus')
+                s3 = boto3.resource('s3')
+                s3.meta.client.upload_file(
+                        wm_file,
+                        'hcp-dki',
+                        path)
+                return subject, True
+            except Exception as err:
+                return subject, err.args
+    else:
+        return subject, True
 
 
 def compare_models(subject):
-    with tempfile.TemporaryDirectory() as tempdir:
-        try:
-            bucket = setup_boto()
-            dwi_file = op.join(tempdir, 'data.nii.gz')
-            bvec_file = op.join(tempdir, 'data.bvec')
-            bval_file = op.join(tempdir, 'data.bval')
+    s3 = boto3.resource('s3')
+    boto3.setup_default_session(profile_name='hcp')
+    bucket = s3.Bucket('hcp-dki')
+    path_dki = '%s/%s_cod_dki.nii.gz' % (subject, subject)
+    path_dti = '%s/%s_cod_dti.nii.gz' % (subject, subject)
 
-            data_files = {}
+    if not(exists(path_dki, bucket) and exists(path_dti, bucket)):
+        with tempfile.TemporaryDirectory() as tempdir:
+            try:
+                bucket = setup_boto()
+                dwi_file = op.join(tempdir, 'data.nii.gz')
+                bvec_file = op.join(tempdir, 'data.bvec')
+                bval_file = op.join(tempdir, 'data.bval')
 
-            data_files[dwi_file] = \
-                'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
-            data_files[bvec_file] = \
-                'HCP_900/%s/T1w/Diffusion/bvecs' % subject
-            data_files[bval_file] = \
-                'HCP_900/%s/T1w/Diffusion/bvals' % subject
-            for k in data_files.keys():
-                if not op.exists(k):
-                    bucket.download_file(data_files[k], k)
+                data_files = {}
 
-            wm_file = op.join(tempdir, 'wm.nii.gz')
-            boto3.setup_default_session(profile_name='cirrus')
-            s3 = boto3.resource('s3')
-            s3.meta.client.download_file(
-                'hcp-dki',
-                '%s/%s_white_matter_mask.nii.gz' % (subject, subject), wm_file)
-            wm_mask = nib.load(wm_file).get_data().astype(bool)
-            dwi_img = nib.load(dwi_file)
-            data = dwi_img.get_data()
-            gtab = dpg.gradient_table(bval_file, bvec_file, b0_threshold=10)
-            for model_object, method in zip([dti.TensorModel,
-                                             dki.DiffusionKurtosisModel],
-                                            ['dti', 'dki']):
+                data_files[dwi_file] = \
+                    'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
+                data_files[bvec_file] = \
+                    'HCP_900/%s/T1w/Diffusion/bvecs' % subject
+                data_files[bval_file] = \
+                    'HCP_900/%s/T1w/Diffusion/bvals' % subject
+                for k in data_files.keys():
+                    if not op.exists(k):
+                        bucket.download_file(data_files[k], k)
 
-                print("1")
-                model = model_object(gtab)
-                print("2")
-                pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
-                print("3")
-                cod = xval.coeff_of_determination(pred, data)
-                cod_file = op.join(tempdir, 'cod_%s.nii.gz' % method)
-                print("4")
-                nib.save(nib.Nifti1Image(cod, dwi_img.affine), cod_file)
-                print("5")
-                s3.meta.client.upload_file(
-                    cod_file,
+                wm_file = op.join(tempdir, 'wm.nii.gz')
+                boto3.setup_default_session(profile_name='cirrus')
+                s3 = boto3.resource('s3')
+                s3.meta.client.download_file(
                     'hcp-dki',
-                    '%s/%s_cod_%s.nii.gz' % (subject, subject, method))
-        except Exception as err:
-            return subject, err.args
+                    '%s/%s_white_matter_mask.nii.gz' % (subject, subject),
+                    wm_file)
+                wm_mask = nib.load(wm_file).get_data().astype(bool)
+                dwi_img = nib.load(dwi_file)
+                data = dwi_img.get_data()
+                gtab = dpg.gradient_table(bval_file, bvec_file,
+                                          b0_threshold=10)
+                for model_object, method in zip([dti.TensorModel,
+                                                 dki.DiffusionKurtosisModel],
+                                                ['dti', 'dki']):
+
+                    print("1")
+                    model = model_object(gtab)
+                    print("2")
+                    pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
+                    print("3")
+                    cod = xval.coeff_of_determination(pred, data)
+                    cod_file = op.join(tempdir, 'cod_%s.nii.gz' % method)
+                    print("4")
+                    nib.save(nib.Nifti1Image(cod, dwi_img.affine), cod_file)
+                    print("5")
+                    s3.meta.client.upload_file(
+                        cod_file,
+                        'hcp-dki',
+                        '%s/%s_cod_%s.nii.gz' % (subject, subject, method))
+                return subject, True
+            except Exception as err:
+                return subject, err.args
+    else:
+        return subject, True
