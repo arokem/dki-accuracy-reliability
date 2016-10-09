@@ -65,7 +65,7 @@ def save_wm_mask(subject):
                     '%s/%s_white_matter_mask.nii.gz' % (subject, subject))
             return subject, True
         except Exception as err:
-            return subject, err
+            return subject, err.args[0]
 
 
 def compare_models(subject):
@@ -122,4 +122,4 @@ def compare_models(subject):
                     'hcp-dki',
                     '%s/%s_cod_%s.nii.gz' % (subject, subject, method))
         except Exception as err:
-            return subject, err
+            return subject, err.args[0]
