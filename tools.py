@@ -65,7 +65,7 @@ def save_wm_mask(subject):
                     '%s/%s_white_matter_mask.nii.gz' % (subject, subject))
             return subject, True
         except Exception as err:
-            return subject, err.args[0]
+            return subject, err.args
 
 
 def compare_models(subject):
@@ -105,12 +105,7 @@ def compare_models(subject):
                 print("1")
                 model = model_object(gtab)
                 print("2")
-                if method == 'dti':
-                    pred = xval.kfold_xval(model, data, 5, mask=wm_mask,
-                                           step=1000000)
-                else:
-                    pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
-
+                pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
                 print("3")
                 cod = xval.coeff_of_determination(pred, data)
                 cod_file = op.join(tempdir, 'cod_%s.nii.gz' % method)
@@ -122,4 +117,4 @@ def compare_models(subject):
                     'hcp-dki',
                     '%s/%s_cod_%s.nii.gz' % (subject, subject, method))
         except Exception as err:
-            return subject, err.args[0]
+            return subject, err.args
