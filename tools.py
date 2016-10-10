@@ -17,10 +17,13 @@ import dipy.reconst.dki as dki
 import dipy.core.gradients as dpg
 import dipy.reconst.cross_validation as xval
 
-def exists(bucket, path):
-    all_obj = bucket.objects.all()
-    pages = all_obj.pages()
-    paths = [kk.key for kk in [p for p in pages][0]]
+
+def exists(path, bucket_name):
+    conn = boto3.client('s3')
+    paths = []
+    for key in conn.list_objects(Bucket=bucket_name)['Contents']:
+        paths.append(key['Key'])
+
     if path in paths:
         return True
     else:
@@ -36,10 +39,10 @@ def setup_boto():
 
 def save_wm_mask(subject):
     s3 = boto3.resource('s3')
-    boto3.setup_default_session(profile_name='hcp')
+    boto3.setup_default_session(profile_name='cirrus')
     bucket = s3.Bucket('hcp-dki')
     path = '%s/%s_white_matter_mask.nii.gz' % (subject, subject)
-    if not exists(bucket, path):
+    if not exists(path, bucket.name):
         bucket = setup_boto()
         with tempfile.TemporaryDirectory() as tempdir:
             try:
@@ -90,12 +93,11 @@ def save_wm_mask(subject):
 
 def compare_models(subject):
     s3 = boto3.resource('s3')
-    boto3.setup_default_session(profile_name='hcp')
+    boto3.setup_default_session(profile_name='cirrus')
     bucket = s3.Bucket('hcp-dki')
     path_dki = '%s/%s_cod_dki.nii.gz' % (subject, subject)
     path_dti = '%s/%s_cod_dti.nii.gz' % (subject, subject)
-
-    if not(exists(path_dki, bucket) and exists(path_dti, bucket)):
+    if not (exists(path_dki, bucket.name) and exists(path_dti, bucket.name)):
         with tempfile.TemporaryDirectory() as tempdir:
             try:
                 bucket = setup_boto()
