@@ -178,7 +178,7 @@ def calc_cod_dti1000(subject):
     if not exists(path_dti, bucket.name):
         print("File doesn't exist - going ahead")
         with tempfile.TemporaryDirectory() as tempdir:
-            #try:
+            try:
                 bucket = setup_boto()
                 dwi_file = op.join(tempdir, 'data.nii.gz')
                 bvec_file = op.join(tempdir, 'data.bvec')
@@ -231,7 +231,7 @@ def calc_cod_dti1000(subject):
                     path_dti)
 
                 return subject, True
-            #except Exception as err:
-            #    return subject, err.args
+            except Exception as err:
+                return subject, err.args
     else:
         return subject, True
