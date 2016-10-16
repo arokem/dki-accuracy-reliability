@@ -169,13 +169,13 @@ def compare_models(subject):
         return subject, True
 
 
-
-def calc_cod_dti1000(subject):
+def calc_cod1000(subject):
     s3 = boto3.resource('s3')
     boto3.setup_default_session(profile_name='cirrus')
     bucket = s3.Bucket('hcp-dki')
     path_dti = '%s/%s_cod_dti_1000.nii.gz' % (subject, subject)
-    if not exists(path_dti, bucket.name):
+    path_dki = '%s/%s_cod_dki_1000.nii.gz' % (subject, subject)
+    if not (exists(path_dti, bucket.name) and exists(path_dki, bucket.name)):
         print("File doesn't exist - going ahead")
         with tempfile.TemporaryDirectory() as tempdir:
             try:
@@ -199,6 +199,8 @@ def calc_cod_dti1000(subject):
                 wm_file = op.join(tempdir, 'wm.nii.gz')
                 boto3.setup_default_session(profile_name='cirrus')
                 s3 = boto3.resource('s3')
+                bucket = s3.Bucket('hcp-dki')
+
                 s3.meta.client.download_file(
                     'hcp-dki',
                     '%s/%s_white_matter_mask.nii.gz' % (subject, subject),
@@ -208,27 +210,40 @@ def calc_cod_dti1000(subject):
                 data = dwi_img.get_data()
                 bvals = np.loadtxt(bval_file)
                 bvecs = np.loadtxt(bvec_file)
-
                 idx = bvals < 1985
-                data = data[..., idx]
-                gtab = dpg.gradient_table(bvals[idx], bvecs[:, idx].squeeze(),
-                                          b0_threshold=10)
 
-                print("1")
-                model = dti.TensorModel(gtab)
-                print("2")
-                pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
-                print("3")
-                cod = xval.coeff_of_determination(pred, data)
-                cod_file = op.join(tempdir, 'cod_dti_1000.nii.gz')
-                print("4")
-                nib.save(nib.Nifti1Image(cod, dwi_img.affine),
-                         cod_file)
-                print("5")
-                s3.meta.client.upload_file(
-                    cod_file,
-                    'hcp-dki',
-                    path_dti)
+                if not exists(path_dki, bucket.name):
+                    gtab = dpg.gradient_table(bvals, bvecs, b0_threshold=10)
+                    dki_model = dki.DiffusionKurtosisModel(gtab)
+                    # Use all the data to calculate the mode
+                    pred = xval.kfold_xval(dki_model, data, 5, mask=wm_mask)
+                    # But compare only on the b=1000 shell (same as DTI):
+                    cod = xval.coeff_of_determination(pred[..., idx],
+                                                      data[..., idx])
+                    cod_file = op.join(tempdir, 'cod_dki_1000.nii.gz')
+                    nib.save(nib.Nifti1Image(cod, dwi_img.affine),
+                             cod_file)
+                    s3.meta.client.upload_file(
+                        cod_file,
+                        'hcp-dki',
+                        path_dki)
+
+                if not exists(path_dti, bucket.name):
+                    data = data[..., idx]
+                    gtab = dpg.gradient_table(bvals[idx],
+                                              bvecs[:, idx].squeeze(),
+                                              b0_threshold=10)
+
+                    model = dti.TensorModel(gtab)
+                    pred = xval.kfold_xval(model, data, 5, mask=wm_mask)
+                    cod = xval.coeff_of_determination(pred, data)
+                    cod_file = op.join(tempdir, 'cod_dti_1000.nii.gz')
+                    nib.save(nib.Nifti1Image(cod, dwi_img.affine),
+                             cod_file)
+                    s3.meta.client.upload_file(
+                        cod_file,
+                        'hcp-dki',
+                        path_dti)
 
                 return subject, True
             except Exception as err:
