@@ -252,182 +252,186 @@ def calc_cod1000(subject):
         return subject, True
 
 
-
-
 def make_maps(subject):
+
     s3 = boto3.resource('s3')
     boto3.setup_default_session(profile_name='cirrus')
     bucket = s3.Bucket('hcp-dki')
-    with tempfile.TemporaryDirectory() as tempdir:
-        try:
-            bucket = setup_boto()
-            dwi_file = op.join(tempdir, 'data.nii.gz')
-            bvec_file = op.join(tempdir, 'data.bvec')
-            bval_file = op.join(tempdir, 'data.bval')
+    path = '%s/%s_dki_1000_3000_MK.nii.gz' % (subject, subject)
+    if not exists(path, bucket.name):
 
-            data_files = {}
+        with tempfile.TemporaryDirectory() as tempdir:
+            try:
+                bucket = setup_boto()
+                dwi_file = op.join(tempdir, 'data.nii.gz')
+                bvec_file = op.join(tempdir, 'data.bvec')
+                bval_file = op.join(tempdir, 'data.bval')
 
-            data_files[dwi_file] = \
-                'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
-            data_files[bvec_file] = \
-                'HCP_900/%s/T1w/Diffusion/bvecs' % subject
-            data_files[bval_file] = \
-                'HCP_900/%s/T1w/Diffusion/bvals' % subject
-            for k in data_files.keys():
-                if not op.exists(k):
-                    bucket.download_file(data_files[k], k)
+                data_files = {}
 
-            wm_file = op.join(tempdir, 'wm.nii.gz')
-            boto3.setup_default_session(profile_name='cirrus')
-            s3 = boto3.resource('s3')
-            bucket = s3.Bucket('hcp-dki')
+                data_files[dwi_file] = \
+                    'HCP_900/%s/T1w/Diffusion/data.nii.gz' % subject
+                data_files[bvec_file] = \
+                    'HCP_900/%s/T1w/Diffusion/bvecs' % subject
+                data_files[bval_file] = \
+                    'HCP_900/%s/T1w/Diffusion/bvals' % subject
+                for k in data_files.keys():
+                    if not op.exists(k):
+                        bucket.download_file(data_files[k], k)
 
-            s3.meta.client.download_file(
-                'hcp-dki',
-                '%s/%s_white_matter_mask.nii.gz' % (subject, subject),
-                wm_file)
-            wm_mask = nib.load(wm_file).get_data().astype(bool)
-            dwi_img = nib.load(dwi_file)
-            data = dwi_img.get_data()
-            bvals = np.loadtxt(bval_file)
-            bvecs = np.loadtxt(bvec_file)
-            gtab = dpg.gradient_table(bvals, bvecs)
-            idx1000 = ((gtab.bvals < 1100) | (gtab.bvals <= 5))
-            idx2000 = (((gtab.bvals > 1100) & (gtab.bvals < 2100)) |
-                       (gtab.bvals <= 5))
-            idx3000 = ((gtab.bvals > 2100) | (gtab.bvals <= 5))
-            data1000 = data[..., idx1000]
-            data2000 = data[..., idx2000]
-            data3000 = data[..., idx3000]
-            data1000_2000 = data[..., idx1000 + idx2000]
-            data1000_3000 = data[..., idx1000 + idx3000]
-            data2000_3000 = data[..., idx2000 + idx3000]
-            gtab1000 = dpg.gradient_table(gtab.bvals[idx1000],
-                                          gtab.bvecs[idx1000],
-                                          b0_threshold=10)
-            gtab2000 = dpg.gradient_table(gtab.bvals[idx1000],
-                                          gtab.bvecs[idx1000],
-                                          b0_threshold=10)
-            gtab3000 = dpg.gradient_table(gtab.bvals[idx1000],
-                                          gtab.bvecs[idx1000],
-                                          b0_threshold=10)
-            gtab1000_2000 = dpg.gradient_table(
-                            gtab.bvals[idx1000 + idx2000],
-                            gtab.bvecs[idx1000 + idx2000],
-                            b0_threshold=10)
-            gtab1000_3000 = dpg.gradient_table(
-                                gtab.bvals[idx1000 + idx3000],
-                                gtab.bvecs[idx1000 + idx3000],
+                wm_file = op.join(tempdir, 'wm.nii.gz')
+                boto3.setup_default_session(profile_name='cirrus')
+                s3 = boto3.resource('s3')
+                bucket = s3.Bucket('hcp-dki')
+
+                s3.meta.client.download_file(
+                    'hcp-dki',
+                    '%s/%s_white_matter_mask.nii.gz' % (subject, subject),
+                    wm_file)
+                wm_mask = nib.load(wm_file).get_data().astype(bool)
+                dwi_img = nib.load(dwi_file)
+                data = dwi_img.get_data()
+                bvals = np.loadtxt(bval_file)
+                bvecs = np.loadtxt(bvec_file)
+                gtab = dpg.gradient_table(bvals, bvecs)
+                idx1000 = ((gtab.bvals < 1100) | (gtab.bvals <= 5))
+                idx2000 = (((gtab.bvals > 1100) & (gtab.bvals < 2100)) |
+                           (gtab.bvals <= 5))
+                idx3000 = ((gtab.bvals > 2100) | (gtab.bvals <= 5))
+                data1000 = data[..., idx1000]
+                data2000 = data[..., idx2000]
+                data3000 = data[..., idx3000]
+                data1000_2000 = data[..., idx1000 + idx2000]
+                data1000_3000 = data[..., idx1000 + idx3000]
+                data2000_3000 = data[..., idx2000 + idx3000]
+                gtab1000 = dpg.gradient_table(gtab.bvals[idx1000],
+                                              gtab.bvecs[idx1000],
+                                              b0_threshold=10)
+                gtab2000 = dpg.gradient_table(gtab.bvals[idx1000],
+                                              gtab.bvecs[idx1000],
+                                              b0_threshold=10)
+                gtab3000 = dpg.gradient_table(gtab.bvals[idx1000],
+                                              gtab.bvecs[idx1000],
+                                              b0_threshold=10)
+                gtab1000_2000 = dpg.gradient_table(
+                                gtab.bvals[idx1000 + idx2000],
+                                gtab.bvecs[idx1000 + idx2000],
                                 b0_threshold=10)
-            gtab2000_3000 = dpg.gradient_table(
-                                gtab.bvals[idx2000 + idx3000],
-                                gtab.bvecs[idx2000 + idx3000],
-                                b0_threshold=10)
+                gtab1000_3000 = dpg.gradient_table(
+                                    gtab.bvals[idx1000 + idx3000],
+                                    gtab.bvecs[idx1000 + idx3000],
+                                    b0_threshold=10)
+                gtab2000_3000 = dpg.gradient_table(
+                                    gtab.bvals[idx2000 + idx3000],
+                                    gtab.bvecs[idx2000 + idx3000],
+                                    b0_threshold=10)
 
-            dti_model1000 = dti.TensorModel(gtab1000)
-            dti_model2000 = dti.TensorModel(gtab2000)
-            dti_model3000 = dti.TensorModel(gtab3000)
-            dti_model1000_2000 = dti.TensorModel(gtab1000_2000)
-            dti_model1000_3000 = dti.TensorModel(gtab1000_3000)
-            dti_model2000_3000 = dti.TensorModel(gtab2000_3000)
-            dti_fit1000 = dti_model1000.fit(data1000, mask=wm_mask)
-            dti_fit2000 = dti_model2000.fit(data2000, mask=wm_mask)
-            dti_fit3000 = dti_model3000.fit(data3000, mask=wm_mask)
-            dti_fit1000_2000 = dti_model1000_2000.fit(data1000_2000,
-                                                      mask=wm_mask)
-            dti_fit1000_3000 = dti_model1000_3000.fit(data1000_3000,
-                                                      mask=wm_mask)
-            dti_fit2000_3000 = dti_model2000_3000.fit(data2000_3000,
-                                                      mask=wm_mask)
-            for FA, fa_file in zip(
-                [dti_fit1000.fa, dti_fit2000.fa, dti_fit3000.fa,
-                 dti_fit1000_2000.fa,
-                 dti_fit2000_3000.fa,
-                 dti_fit1000_3000.fa],
-                ['%s_dti_1000_FA.nii.gz' % subject,
-                 '%s_dti_2000_FA.nii.gz' % subject,
-                 '%s_dti_3000_FA.nii.gz' % subject,
-                 '%s_dti_1000_2000_FA.nii.gz' % subject,
-                 '%s_dti_2000_3000_FA.nii.gz' % subject,
-                 '%s_dti_1000_3000_FA.nii.gz' % subject,
-                 ]):
-                nib.save(nib.Nifti1Image(FA, dwi_img.affine),
-                         op.join(tempdir, fa_file))
-                s3.meta.client.upload_file(
-                                    op.join(tempdir, fa_file),
-                                    'hcp-dki',
-                                    '%s/%s' % (subject, fa_file))
+                dti_model1000 = dti.TensorModel(gtab1000)
+                dti_model2000 = dti.TensorModel(gtab2000)
+                dti_model3000 = dti.TensorModel(gtab3000)
+                dti_model1000_2000 = dti.TensorModel(gtab1000_2000)
+                dti_model1000_3000 = dti.TensorModel(gtab1000_3000)
+                dti_model2000_3000 = dti.TensorModel(gtab2000_3000)
+                dti_fit1000 = dti_model1000.fit(data1000, mask=wm_mask)
+                dti_fit2000 = dti_model2000.fit(data2000, mask=wm_mask)
+                dti_fit3000 = dti_model3000.fit(data3000, mask=wm_mask)
+                dti_fit1000_2000 = dti_model1000_2000.fit(data1000_2000,
+                                                          mask=wm_mask)
+                dti_fit1000_3000 = dti_model1000_3000.fit(data1000_3000,
+                                                          mask=wm_mask)
+                dti_fit2000_3000 = dti_model2000_3000.fit(data2000_3000,
+                                                          mask=wm_mask)
+                for FA, fa_file in zip(
+                    [dti_fit1000.fa, dti_fit2000.fa, dti_fit3000.fa,
+                     dti_fit1000_2000.fa,
+                     dti_fit2000_3000.fa,
+                     dti_fit1000_3000.fa],
+                    ['%s_dti_1000_FA.nii.gz' % subject,
+                     '%s_dti_2000_FA.nii.gz' % subject,
+                     '%s_dti_3000_FA.nii.gz' % subject,
+                     '%s_dti_1000_2000_FA.nii.gz' % subject,
+                     '%s_dti_2000_3000_FA.nii.gz' % subject,
+                     '%s_dti_1000_3000_FA.nii.gz' % subject,
+                     ]):
+                    nib.save(nib.Nifti1Image(FA, dwi_img.affine),
+                             op.join(tempdir, fa_file))
+                    s3.meta.client.upload_file(
+                                        op.join(tempdir, fa_file),
+                                        'hcp-dki',
+                                        '%s/%s' % (subject, fa_file))
 
-            for MD, md_file in zip(
-                [dti_fit1000.md, dti_fit2000.md, dti_fit3000.md,
-                 dti_fit1000_2000.md,
-                 dti_fit2000_3000.md,
-                 dti_fit1000_3000.md],
-                ['%s_dti_1000_MD.nii.gz' % subject,
-                 '%s_dti_2000_MD.nii.gz' % subject,
-                 '%s_dti_3000_MD.nii.gz' % subject,
-                 '%s_dti_1000_2000_MD.nii.gz' % subject,
-                 '%s_dti_2000_3000_MD.nii.gz' % subject,
-                 '%s_dti_1000_3000_MD.nii.gz' % subject,
-                 ]):
-                nib.save(nib.Nifti1Image(MD, dwi_img.affine),
-                         op.join(tempdir, md_file))
-                s3.meta.client.upload_file(
-                                    op.join(tempdir, md_file),
-                                    'hcp-dki',
-                                    '%s/%s' % (subject, md_file))
+                for MD, md_file in zip(
+                    [dti_fit1000.md, dti_fit2000.md, dti_fit3000.md,
+                     dti_fit1000_2000.md,
+                     dti_fit2000_3000.md,
+                     dti_fit1000_3000.md],
+                    ['%s_dti_1000_MD.nii.gz' % subject,
+                     '%s_dti_2000_MD.nii.gz' % subject,
+                     '%s_dti_3000_MD.nii.gz' % subject,
+                     '%s_dti_1000_2000_MD.nii.gz' % subject,
+                     '%s_dti_2000_3000_MD.nii.gz' % subject,
+                     '%s_dti_1000_3000_MD.nii.gz' % subject,
+                     ]):
+                    nib.save(nib.Nifti1Image(MD, dwi_img.affine),
+                             op.join(tempdir, md_file))
+                    s3.meta.client.upload_file(
+                                        op.join(tempdir, md_file),
+                                        'hcp-dki',
+                                        '%s/%s' % (subject, md_file))
 
-            dki_model1000_2000 = dki.DiffusionKurtosisModel(gtab1000_2000)
-            dki_model1000_3000 = dki.DiffusionKurtosisModel(gtab1000_3000)
-            dki_model2000_3000 = dki.DiffusionKurtosisModel(gtab2000_3000)
-            dki_fit1000_2000 = dki_model1000_2000.fit(data1000_2000)
-            dki_fit1000_3000 = dki_model1000_3000.fit(data1000_3000)
-            dki_fit2000_3000 = dki_model2000_3000.fit(data2000_3000)
+                dki_model1000_2000 = dki.DiffusionKurtosisModel(gtab1000_2000)
+                dki_model1000_3000 = dki.DiffusionKurtosisModel(gtab1000_3000)
+                dki_model2000_3000 = dki.DiffusionKurtosisModel(gtab2000_3000)
+                dki_fit1000_2000 = dki_model1000_2000.fit(data1000_2000)
+                dki_fit1000_3000 = dki_model1000_3000.fit(data1000_3000)
+                dki_fit2000_3000 = dki_model2000_3000.fit(data2000_3000)
 
-            for FA, fa_file in zip(
-                [dki_fit1000_2000.fa,
-                 dki_fit2000_3000.fa,
-                 dki_fit1000_3000.fa],
-                ['%s_dki_1000_2000_FA.nii.gz' % subject,
-                 '%s_dki_2000_3000_FA.nii.gz' % subject,
-                 '%s_dki_1000_3000_FA.nii.gz' % subject,
-                 ]):
-                nib.save(nib.Nifti1Image(FA, dwi_img.affine),
-                         op.join(tempdir, fa_file))
-                s3.meta.client.upload_file(
-                                    op.join(tempdir, fa_file),
-                                    'hcp-dki',
-                                    '%s/%s' % (subject, fa_file))
+                for FA, fa_file in zip(
+                    [dki_fit1000_2000.fa,
+                     dki_fit2000_3000.fa,
+                     dki_fit1000_3000.fa],
+                    ['%s_dki_1000_2000_FA.nii.gz' % subject,
+                     '%s_dki_2000_3000_FA.nii.gz' % subject,
+                     '%s_dki_1000_3000_FA.nii.gz' % subject,
+                     ]):
+                    nib.save(nib.Nifti1Image(FA, dwi_img.affine),
+                             op.join(tempdir, fa_file))
+                    s3.meta.client.upload_file(
+                                        op.join(tempdir, fa_file),
+                                        'hcp-dki',
+                                        '%s/%s' % (subject, fa_file))
 
-            for MD, md_file in zip(
-                [dki_fit1000_2000.md,
-                 dki_fit2000_3000.md,
-                 dki_fit1000_3000.md],
-                ['%s_dki_1000_2000_MD.nii.gz' % subject,
-                 '%s_dki_2000_3000_MD.nii.gz' % subject,
-                 '%s_dki_1000_3000_MD.nii.gz' % subject,
-                 ]):
-                nib.save(nib.Nifti1Image(MD, dwi_img.affine),
-                         op.join(tempdir, md_file))
-                s3.meta.client.upload_file(
-                                    op.join(tempdir, md_file),
-                                    'hcp-dki',
-                                    '%s/%s' % (subject, md_file))
+                for MD, md_file in zip(
+                    [dki_fit1000_2000.md,
+                     dki_fit2000_3000.md,
+                     dki_fit1000_3000.md],
+                    ['%s_dki_1000_2000_MD.nii.gz' % subject,
+                     '%s_dki_2000_3000_MD.nii.gz' % subject,
+                     '%s_dki_1000_3000_MD.nii.gz' % subject,
+                     ]):
+                    nib.save(nib.Nifti1Image(MD, dwi_img.affine),
+                             op.join(tempdir, md_file))
+                    s3.meta.client.upload_file(
+                                        op.join(tempdir, md_file),
+                                        'hcp-dki',
+                                        '%s/%s' % (subject, md_file))
 
-            for MK, mk_file in zip(
-                [dki_fit1000_2000.mk(),
-                 dki_fit2000_3000.mk(),
-                 dki_fit1000_3000.mk()],
-                ['%s_dki_1000_2000_MK.nii.gz' % subject,
-                 '%s_dki_2000_3000_MK.nii.gz' % subject,
-                 '%s_dki_1000_3000_MK.nii.gz' % subject,
-                 ]):
-                nib.save(nib.Nifti1Image(MK, dwi_img.affine),
-                         op.join(tempdir, mk_file))
-                s3.meta.client.upload_file(
-                                    op.join(tempdir, mk_file),
-                                    'hcp-dki',
-                                    '%s/%s' % (subject, mk_file))
-            return subject, True
+                for MK, mk_file in zip(
+                    [dki_fit1000_2000.mk(),
+                     dki_fit2000_3000.mk(),
+                     dki_fit1000_3000.mk()],
+                    ['%s_dki_1000_2000_MK.nii.gz' % subject,
+                     '%s_dki_2000_3000_MK.nii.gz' % subject,
+                     '%s_dki_1000_3000_MK.nii.gz' % subject,
+                     ]):
+                    nib.save(nib.Nifti1Image(MK, dwi_img.affine),
+                             op.join(tempdir, mk_file))
+                    s3.meta.client.upload_file(
+                                        op.join(tempdir, mk_file),
+                                        'hcp-dki',
+                                        '%s/%s' % (subject, mk_file))
+                return subject, True
         except Exception as err:
             return subject, err.args
+    else:
+        return subject, True
