@@ -431,7 +431,7 @@ def make_maps(subject):
                                         'hcp-dki',
                                         '%s/%s' % (subject, mk_file))
                 return subject, True
-        except Exception as err:
-            return subject, err.args
+            except Exception as err:
+                return subject, err.args
     else:
         return subject, True
